@@ -1,6 +1,12 @@
 <?php
 session_start();
 
+// Include audit trail helper if it exists
+$audit_trail_exists = file_exists('audit_trail_helper.php');
+if ($audit_trail_exists) {
+    require_once 'audit_trail_helper.php';
+}
+
 $servername = "localhost";
 $username = "root";  
 $password = "";      
@@ -44,7 +50,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         
         if ($password_correct) {
             $_SESSION['user_id'] = $id;
-            $_SESSION['email'] = $email;
+            $_SESSION['user_email'] = $email;
             $_SESSION['user_name'] = $first_name . ' ' . $last_name;
             
             // Check if admin based on email domain or usertype
@@ -56,18 +62,40 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
             if ($email_domain === 'gov.ph' || $usertype === 'admin') {
                 $_SESSION['is_admin'] = true;
+                
+                // Log admin login
+                if ($audit_trail_exists && function_exists('logAdminLogin')) {
+                    logAdminLogin($id, $email);
+                }
+                
                 header("Location: admindashboard.php");
                 exit();
             } else {
                 $_SESSION['is_admin'] = false;
+                
+                // Log regular user login (optional)
+                if ($audit_trail_exists && function_exists('logUserLogin')) {
+                    logUserLogin($id, $email);
+                }
+                
                 header("Location: homepage.php");
                 exit();
             }
         } else {
             $error = "Invalid email or password.";
+            
+            // Log failed login attempt
+            if ($audit_trail_exists && function_exists('logFailedLogin')) {
+                logFailedLogin($email);
+            }
         }
     } else {
         $error = "Invalid email or password.";
+        
+        // Log failed login attempt
+        if ($audit_trail_exists && function_exists('logFailedLogin')) {
+            logFailedLogin($email);
+        }
     }
     $stmt->close();
 }
