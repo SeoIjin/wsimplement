@@ -73,7 +73,7 @@ require_once 'audit_trail_helper.php';
       cursor: pointer;
       border: none;
       border-radius: 0.375rem;
-      background: #228650;
+      background: #16a34a;
       color: white;
       transition: opacity 0.2s;
       font-family: 'Poppins', sans-serif;
@@ -105,7 +105,7 @@ require_once 'audit_trail_helper.php';
 
     .page-title h1 {
       font-size: 1.5rem;
-      color: #2c5f2d;
+      color: #14532d;
       margin-bottom: 0.5rem;
       display: flex;
       align-items: center;
@@ -142,6 +142,31 @@ require_once 'audit_trail_helper.php';
       flex: 1;
     }
 
+    .filter-tab {
+      padding: 0.5rem 1rem;
+      border: none;
+      border-radius: 0.5rem;
+      background: #f3f4f6;
+      color: #4b5563;
+      cursor: pointer;
+      font-family: 'Poppins', sans-serif;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: all 0.3s;
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+    }
+
+    .filter-tab.active {
+      background: #16a34a;
+      color: white;
+    }
+
+    .filter-tab:hover:not(.active) {
+      background: #e5e7eb;
+    }
+
     .items-per-page {
       display: flex;
       align-items: center;
@@ -162,31 +187,6 @@ require_once 'audit_trail_helper.php';
       font-size: 0.875rem;
       cursor: pointer;
       background: white;
-    }
-
-    .filter-tab {
-      padding: 0.5rem 1rem;
-      border: none;
-      border-radius: 0.5rem;
-      background: #f3f4f6;
-      color: #4b5563;
-      cursor: pointer;
-      font-family: 'Poppins', sans-serif;
-      font-size: 0.875rem;
-      font-weight: 500;
-      transition: all 0.3s;
-      display: flex;
-      align-items: center;
-      gap: 0.375rem;
-    }
-
-    .filter-tab.active {
-      background: #228650;
-      color: white;
-    }
-
-    .filter-tab:hover:not(.active) {
-      background: #e5e7eb;
     }
 
     /* Audit Trail List */
@@ -241,7 +241,7 @@ require_once 'audit_trail_helper.php';
     }
 
     .action-icon.login {
-      background: #d4f8e8;
+      background: #d1fae5;
       color: #16a34a;
     }
 
@@ -317,9 +317,9 @@ require_once 'audit_trail_helper.php';
     .changes-section {
       margin-top: 0.75rem;
       padding: 0.75rem;
-      background: #f9fafb;
+      background: #f0fdf4;
       border-radius: 0.5rem;
-      border-left: 3px solid #228650;
+      border-left: 3px solid #16a34a;
     }
 
     .changes-title {
@@ -346,7 +346,7 @@ require_once 'audit_trail_helper.php';
     }
 
     .change-arrow {
-      color: #228650;
+      color: #16a34a;
       margin: 0 0.5rem;
     }
 
@@ -359,7 +359,7 @@ require_once 'audit_trail_helper.php';
 
     .spinner {
       border: 3px solid #f3f3f3;
-      border-top: 3px solid #228650;
+      border-top: 3px solid #16a34a;
       border-radius: 50%;
       width: 40px;
       height: 40px;
@@ -426,9 +426,9 @@ require_once 'audit_trail_helper.php';
     }
 
     .pagination-btn:hover:not(:disabled) {
-      background: #228650;
+      background: #16a34a;
       color: white;
-      border-color: #228650;
+      border-color: #16a34a;
     }
 
     .pagination-btn:disabled {
@@ -460,13 +460,13 @@ require_once 'audit_trail_helper.php';
 
     .page-number:hover:not(.active) {
       background: #f9fafb;
-      border-color: #228650;
+      border-color: #16a34a;
     }
 
     .page-number.active {
-      background: #228650;
+      background: #16a34a;
       color: white;
-      border-color: #228650;
+      border-color: #16a34a;
       font-weight: 600;
     }
 
@@ -616,7 +616,6 @@ require_once 'audit_trail_helper.php';
     let itemsPerPage = 20;
     let totalItems = 0;
 
-    // Load audit trail
     async function loadAuditTrail() {
       try {
         const response = await fetch(`api_get_audit_trail.php?filter=${currentFilter}&limit=${itemsPerPage}&offset=${currentPage * itemsPerPage}`, {
@@ -772,16 +771,13 @@ require_once 'audit_trail_helper.php';
       if (totalItems > 0) {
         paginationControls.style.display = 'flex';
         
-        // Update page info
         const startItem = currentPage * itemsPerPage + 1;
         const endItem = Math.min((currentPage + 1) * itemsPerPage, totalItems);
         pageInfo.textContent = `Showing ${startItem}-${endItem} of ${totalItems} records`;
         
-        // Update buttons
         prevBtn.disabled = currentPage === 0;
         nextBtn.disabled = currentPage >= totalPages - 1;
 
-        // Generate page numbers
         pageNumbers.innerHTML = generatePageNumbers(currentPageNum, totalPages);
       } else {
         paginationControls.style.display = 'none';
@@ -793,19 +789,16 @@ require_once 'audit_trail_helper.php';
       const maxVisible = 5;
 
       if (totalPages <= maxVisible) {
-        // Show all pages
         for (let i = 1; i <= totalPages; i++) {
           pages.push(createPageButton(i, currentPageNum));
         }
       } else {
-        // Always show first page
         pages.push(createPageButton(1, currentPageNum));
 
         if (currentPageNum > 3) {
           pages.push('<span class="page-ellipsis">...</span>');
         }
 
-        // Show pages around current page
         const start = Math.max(2, currentPageNum - 1);
         const end = Math.min(totalPages - 1, currentPageNum + 1);
 
@@ -817,7 +810,6 @@ require_once 'audit_trail_helper.php';
           pages.push('<span class="page-ellipsis">...</span>');
         }
 
-        // Always show last page
         pages.push(createPageButton(totalPages, currentPageNum));
       }
 
@@ -858,7 +850,6 @@ require_once 'audit_trail_helper.php';
       loadAuditTrail();
     }
 
-    // Filter tabs
     document.querySelectorAll('.filter-tab').forEach(tab => {
       tab.addEventListener('click', () => {
         document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
@@ -869,10 +860,7 @@ require_once 'audit_trail_helper.php';
       });
     });
 
-    // Load on page load
     document.addEventListener('DOMContentLoaded', loadAuditTrail);
-
-    // Auto-refresh every 30 seconds
     setInterval(loadAuditTrail, 30000);
   </script>
 </body>
