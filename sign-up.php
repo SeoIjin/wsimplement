@@ -708,7 +708,7 @@ $conn->close();
                             <!-- Upload Files -->
                             <div>
                                 <div class="input-group">
-                                    <label class="input-label">Upload Valid ID (Front and Back)</label>
+                                    <label class="input-label">Upload Valid ID</label>
                                     <div class="upload-box">
                                         <input type="file" id="fileInput" name="file" accept=".jpg,.jpeg,.png,.pdf" required>
                                         <label for="fileInput" class="upload-btn" id="fileLabel">Browse File</label>
@@ -894,4 +894,5 @@ $conn->close();
         });
     </script>
 </body>
+
 </html>
