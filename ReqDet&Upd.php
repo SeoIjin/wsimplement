@@ -26,7 +26,6 @@ $ticket_id = $_GET['ticket_id'] ?? null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['action'])) {
         if ($_POST['action'] === 'delete_request') {
-            // Get request type before deleting
             $stmt = $pdo->prepare("SELECT requesttype FROM requests WHERE ticket_id = ?");
             $stmt->execute([$_POST['ticket_id']]);
             $request = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -34,15 +33,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $pdo->prepare("DELETE FROM requests WHERE ticket_id = ?");
             $stmt->execute([$_POST['ticket_id']]);
             
-            // Log deletion
             logRequestDelete($admin_id, $admin_email, $_POST['ticket_id'], $request['requesttype']);
             
             header("Location: admindashboard.php?msg=deleted");
             exit;
             
         } elseif ($_POST['action'] === 'add_update') {
-            
-            // Get request ID and old status
             $stmt = $pdo->prepare("SELECT id, status, priority FROM requests WHERE ticket_id = ?");
             $stmt->execute([$_POST['ticket_id']]);
             $request_data = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -50,7 +46,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $old_status = $request_data['status'];
             $old_priority = $request_data['priority'];
             
-            // Update both status and priority
             $stmt = $pdo->prepare("UPDATE requests SET status = ?, priority = ? WHERE ticket_id = ?");
             $stmt->execute([$_POST['new_status'], $_POST['priority'], $_POST['ticket_id']]);
             
@@ -58,12 +53,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt_insert = $pdo->prepare("INSERT INTO request_updates (request_id, status, message, updated_by) VALUES (?, ?, ?, ?)");
             $stmt_insert->execute([$request_id, $_POST['new_status'], $update_message, 'Admin']);
             
-            // Log status change
             if ($old_status !== $_POST['new_status']) {
                 logRequestUpdate($admin_id, $admin_email, $_POST['ticket_id'], $old_status, $_POST['new_status'], $update_message);
             }
             
-            // Log priority change
             if ($old_priority !== $_POST['priority']) {
                 logPriorityChange($admin_id, $admin_email, $_POST['ticket_id'], $old_priority, $_POST['priority']);
             }
@@ -82,7 +75,6 @@ if ($ticket_id) {
     $stmt->execute([$ticket_id]);
     $request = $stmt->fetch(PDO::FETCH_ASSOC);
 } else {
-    // Get the most recent request
     $stmt = $pdo->query("SELECT r.*, a.email, a.barangay FROM requests r 
                          LEFT JOIN account a ON r.user_id = a.id 
                          ORDER BY r.submitted_at DESC LIMIT 1");
@@ -96,18 +88,33 @@ if (!$request) {
     die("No request found");
 }
 
-// Status color mapping
-$statusColors = [
-    'PENDING' => '#ff6b4a',
-    'UNDER REVIEW' => '#f39c12',
-    'IN PROGRESS' => '#c29e64',
-    'READY' => '#3498db',
-    'COMPLETED' => '#1ea2a8'
-];
+// Fetch updates
+$stmt = $pdo->prepare("SELECT * FROM request_updates WHERE request_id = ? ORDER BY created_at DESC");
+$stmt->execute([$request['id']]);
+$updates = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Format timestamp
 function formatTimestamp($timestamp) {
     return date('M d, Y - g:i A', strtotime($timestamp));
+}
+
+function getStatusColor($status) {
+    $colors = [
+        'PENDING' => '#f59e0b',
+        'UNDER REVIEW' => '#f59e0b',
+        'IN PROGRESS' => '#ff6b4a',
+        'READY' => '#3b82f6',
+        'COMPLETED' => '#16a34a'
+    ];
+    return $colors[strtoupper($status)] ?? '#6b7280';
+}
+
+function getPriorityColor($priority) {
+    $colors = [
+        'LOW' => '#16a34a',
+        'MEDIUM' => '#f59e0b',
+        'HIGH' => '#ef4444'
+    ];
+    return $colors[strtoupper($priority)] ?? '#6b7280';
 }
 ?>
 <!DOCTYPE html>
@@ -115,8 +122,9 @@ function formatTimestamp($timestamp) {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Request Details & Updates - <?= htmlspecialchars($ticket_id) ?></title>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <title>Request Details - <?= htmlspecialchars($ticket_id) ?></title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   <style>
     * {
       margin: 0;
@@ -127,7 +135,8 @@ function formatTimestamp($timestamp) {
     
     body {
       min-height: 100vh;
-      background: linear-gradient(to bottom right, #d1fae5, #ecfdf5, #ccfbf1);
+      background: #DAF1DE;
+      color: #2c3e50;
     }
     
     /* Header */
@@ -135,41 +144,42 @@ function formatTimestamp($timestamp) {
       background: white;
       border-bottom: 1px solid #e5e7eb;
       padding: 1rem 1.5rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
     
     .header-content {
+      max-width: 1400px;
+      margin: 0 auto;
       display: flex;
       align-items: center;
       gap: 0.75rem;
     }
     
     .header-logo {
-      width: 32px;
-      height: 32px;
-      object-fit: contain;
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      object-fit: cover;
     }
     
     .back-btn {
       display: inline-flex;
       align-items: center;
       gap: 0.5rem;
-      color: #0d9488;
+      color: #16a34a;
       text-decoration: none;
       font-weight: 500;
-      transition: color 0.2s;
+      padding: 0.5rem 1rem;
+      border-radius: 0.5rem;
+      transition: background 0.2s;
     }
     
     .back-btn:hover {
-      color: #0f766e;
-    }
-    
-    .back-icon {
-      width: 16px;
-      height: 16px;
+      background: #f0fdf4;
     }
     
     .header-title {
-      color: #0f766e;
+      color: #14532d;
       font-size: 1.125rem;
       font-weight: 600;
     }
@@ -181,67 +191,52 @@ function formatTimestamp($timestamp) {
       padding: 1.5rem;
     }
     
-    .card-container {
+    .page-header {
       background: white;
-      border-radius: 0.5rem;
-      border: 2px solid #5eead4;
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-      overflow: hidden;
-    }
-    
-    /* Ticket Header */
-    .ticket-header {
-      background: #d1fae5;
-      border-bottom: 2px solid #5eead4;
+      border-radius: 0.75rem;
       padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
       display: flex;
-      align-items: flex-start;
       justify-content: space-between;
+      align-items: center;
     }
     
-    .ticket-info h2 {
-      color: #0f766e;
-      font-size: 1.25rem;
+    .page-title h2 {
+      color: #14532d;
+      font-size: 1.5rem;
       font-weight: 600;
       margin-bottom: 0.25rem;
     }
     
-    .ticket-info p {
-      color: #0d9488;
+    .page-title p {
+      color: #6b7280;
       font-size: 0.875rem;
     }
     
     .status-badge {
-      background: white;
-      color: #0d9488;
-      border: 2px solid #14b8a6;
-      padding: 0.5rem 1rem;
-      border-radius: 9999px;
       display: inline-flex;
       align-items: center;
       gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      border-radius: 9999px;
       font-weight: 600;
       font-size: 0.875rem;
-    }
-    
-    .check-icon {
-      width: 16px;
-      height: 16px;
+      border: 2px solid;
     }
     
     /* Content Grid */
     .content-grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: 1fr 1fr 1fr;
       gap: 1.5rem;
-      padding: 1.5rem;
     }
     
-    /* Section Styles */
     .section {
-      border: 2px solid #5eead4;
-      border-radius: 0.5rem;
-      padding: 1rem;
+      background: white;
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
     }
     
     .section-header {
@@ -249,91 +244,78 @@ function formatTimestamp($timestamp) {
       align-items: center;
       gap: 0.5rem;
       margin-bottom: 1rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 2px solid #f3f4f6;
     }
     
     .section-icon {
-      width: 16px;
-      height: 16px;
-      color: #0d9488;
+      color: #16a34a;
+      font-size: 1.125rem;
     }
     
     .section-title {
-      color: #0f766e;
+      color: #14532d;
       font-size: 1rem;
       font-weight: 600;
     }
     
-    .section-subtitle {
-      color: #6b7280;
-      font-size: 0.875rem;
-      margin-bottom: 1rem;
-    }
-    
-    /* Citizen Information */
+    /* Info Items */
     .info-item {
-      display: flex;
-      align-items: flex-start;
-      gap: 0.5rem;
       margin-bottom: 0.75rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid #f3f4f6;
     }
     
-    .info-icon {
-      width: 16px;
-      height: 16px;
-      color: #0d9488;
-      margin-top: 0.125rem;
-      flex-shrink: 0;
-    }
-    
-    .info-content {
-      flex: 1;
+    .info-item:last-child {
+      border-bottom: none;
+      margin-bottom: 0;
+      padding-bottom: 0;
     }
     
     .info-label {
       color: #6b7280;
       font-size: 0.75rem;
-      margin-bottom: 0.125rem;
+      margin-bottom: 0.25rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 500;
     }
     
     .info-value {
-      color: #374151;
+      color: #2c3e50;
       font-size: 0.875rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
+      font-weight: 500;
     }
     
     .badge-inline {
-      background: #ecfdf5;
-      color: #0d9488;
+      display: inline-block;
+      background: #d1fae5;
+      color: #166534;
       padding: 0.125rem 0.5rem;
       border-radius: 0.25rem;
       font-size: 0.75rem;
-    }
-    
-    .verified-icon {
-      width: 12px;
-      height: 12px;
-      color: #0d9488;
+      font-weight: 600;
+      margin-left: 0.5rem;
     }
     
     /* Description */
     .description-card {
-      background: #ecfdf5;
+      background: #f0fdf4;
       border: 1px solid #d1fae5;
       border-radius: 0.5rem;
       padding: 1rem;
+      margin-top: 0.5rem;
     }
     
     .description-text {
-      color: #374151;
+      color: #166534;
       font-size: 0.875rem;
-      line-height: 1.5;
+      line-height: 1.6;
       margin-bottom: 0.5rem;
     }
     
     .description-time {
-      color: #9ca3af;
+      color: #6b7280;
       font-size: 0.75rem;
       text-align: right;
     }
@@ -344,32 +326,13 @@ function formatTimestamp($timestamp) {
       border-radius: 0.5rem;
       border-left: 4px solid;
       margin-bottom: 1rem;
-    }
-    
-    .update-item.active {
-      background: #fef3c7;
-      border-left-color: #fbbf24;
-    }
-    
-    .update-item.inactive {
       background: #f9fafb;
-      border-left-color: #d1d5db;
     }
     
     .update-status {
       font-weight: 600;
       margin-bottom: 0.25rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-    
-    .update-item.active .update-status {
-      color: #92400e;
-    }
-    
-    .update-item.inactive .update-status {
-      color: #4b5563;
+      font-size: 0.875rem;
     }
     
     .update-time {
@@ -378,38 +341,65 @@ function formatTimestamp($timestamp) {
       margin-bottom: 0.5rem;
     }
     
-    .update-description {
+    .update-message {
       color: #4b5563;
       font-size: 0.875rem;
+      line-height: 1.5;
       margin-bottom: 0.25rem;
     }
     
     .update-by {
-      color: #9ca3af;
+      color: #16a34a;
       font-size: 0.75rem;
+      font-weight: 500;
     }
     
-    /* Request Type */
-    .request-type-badge {
-      background: #dcfce7;
+    /* Request Type Badge */
+    .type-badge {
+      background: #d1fae5;
       color: #166534;
       padding: 0.5rem 1rem;
       border-radius: 0.5rem;
       font-weight: 600;
       display: inline-block;
+      font-size: 0.875rem;
     }
     
-    /* Priority Select */
-    .priority-select {
+    /* Forms */
+    .form-group {
+      margin-bottom: 1rem;
+    }
+    
+    .form-label {
+      display: block;
+      color: #14532d;
+      font-weight: 600;
+      font-size: 0.875rem;
+      margin-bottom: 0.5rem;
+    }
+    
+    .form-select,
+    .form-textarea {
       width: 100%;
-      background: #fef3c7;
-      border: 1px solid #fde68a;
-      color: #92400e;
-      padding: 0.5rem 0.75rem;
+      padding: 0.625rem 0.75rem;
+      border: 1px solid #e5e7eb;
       border-radius: 0.5rem;
       font-size: 0.875rem;
-      font-weight: 500;
-      cursor: pointer;
+      background: white;
+      font-family: 'Poppins', sans-serif;
+      transition: border-color 0.2s;
+    }
+    
+    .form-select:focus,
+    .form-textarea:focus {
+      outline: none;
+      border-color: #16a34a;
+      box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1);
+    }
+    
+    .form-textarea {
+      resize: vertical;
+      min-height: 80px;
     }
     
     /* Buttons */
@@ -421,34 +411,40 @@ function formatTimestamp($timestamp) {
       font-weight: 600;
       font-size: 0.875rem;
       cursor: pointer;
-      transition: opacity 0.2s;
-    }
-    
-    .btn:hover {
-      opacity: 0.9;
+      transition: all 0.2s;
+      font-family: 'Poppins', sans-serif;
     }
     
     .btn-primary {
-      background: #0d9488;
+      background: #16a34a;
       color: white;
     }
     
+    .btn-primary:hover {
+      background: #15803d;
+    }
+    
     .btn-danger {
-      background: #dc2626;
+      background: #ef4444;
       color: white;
+    }
+    
+    .btn-danger:hover {
+      background: #dc2626;
     }
     
     .button-group {
       display: flex;
       flex-direction: column;
       gap: 0.5rem;
+      margin-top: 1rem;
     }
     
     /* Update Panel */
     .update-panel {
       margin-top: 1rem;
-      background: #f0fdfa;
-      border: 1px solid #ccfbf1;
+      background: #f0fdf4;
+      border: 1px solid #d1fae5;
       border-radius: 0.5rem;
       padding: 1rem;
       display: none;
@@ -458,44 +454,11 @@ function formatTimestamp($timestamp) {
       display: block;
     }
     
-    .form-group {
-      margin-bottom: 1rem;
-    }
-    
-    .form-label {
-      display: block;
-      color: #0f766e;
-      font-weight: 600;
-      font-size: 0.875rem;
-      margin-bottom: 0.5rem;
-    }
-    
-    .form-select,
-    .form-textarea {
-      width: 100%;
-      padding: 0.5rem 0.75rem;
-      border: 1px solid #d1fae5;
-      border-radius: 0.5rem;
-      font-size: 0.875rem;
-      background: white;
-    }
-    
-    .form-textarea {
-      resize: vertical;
-      min-height: 80px;
-    }
-    
     /* Responsive */
     @media (max-width: 1024px) {
       .content-grid {
         grid-template-columns: 1fr;
       }
-    }
-    
-    /* SVG Icons */
-    .icon-svg {
-      display: inline-block;
-      vertical-align: middle;
     }
   </style>
 </head>
@@ -503,9 +466,7 @@ function formatTimestamp($timestamp) {
   <header>
     <div class="header-content">
       <a href="admindashboard.php" class="back-btn">
-        <svg class="back-icon icon-svg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-        </svg>
+        <i class="fas fa-arrow-left"></i>
         <span>Back to Dashboard</span>
       </a>
       <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRTDCuh4kIpAtR-QmjA1kTjE_8-HSd8LSt3Gw&s" alt="seal" class="header-logo">
@@ -514,195 +475,171 @@ function formatTimestamp($timestamp) {
   </header>
 
   <main>
-    <div class="card-container">
-      <!-- Ticket Header -->
-      <div class="ticket-header">
-        <div class="ticket-info">
-          <h2>Request Details</h2>
-          <p>Ticket ID: <?= htmlspecialchars($request['ticket_id']) ?></p>
+    <!-- Page Header -->
+    <div class="page-header">
+      <div class="page-title">
+        <h2>Request Details</h2>
+        <p>Ticket ID: <?= htmlspecialchars($request['ticket_id']) ?></p>
+      </div>
+      <div 
+        class="status-badge" 
+        style="background: <?= getStatusColor($request['status']) ?>20; 
+               color: <?= getStatusColor($request['status']) ?>; 
+               border-color: <?= getStatusColor($request['status']) ?>"
+      >
+        <i class="fas fa-circle" style="font-size: 0.5rem;"></i>
+        <?= htmlspecialchars($request['status']) ?>
+      </div>
+    </div>
+
+    <!-- Content Grid -->
+    <div class="content-grid">
+      <!-- Citizen Information -->
+      <div class="section">
+        <div class="section-header">
+          <i class="fas fa-user section-icon"></i>
+          <h3 class="section-title">Citizen Information</h3>
         </div>
-        <div class="status-badge">
-          <?= htmlspecialchars($request['status']) ?>
-          <svg class="check-icon icon-svg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-          </svg>
+        
+        <div class="info-item">
+          <div class="info-label">Full Name</div>
+          <div class="info-value">
+            <?= htmlspecialchars($request['fullname']) ?>
+            <span class="badge-inline">Resident</span>
+          </div>
+        </div>
+
+        <div class="info-item">
+          <div class="info-label">Contact Number</div>
+          <div class="info-value"><?= htmlspecialchars($request['contact']) ?></div>
+        </div>
+
+        <div class="info-item">
+          <div class="info-label">Email Address</div>
+          <div class="info-value"><?= htmlspecialchars($request['email'] ?? 'N/A') ?></div>
+        </div>
+
+        <div class="info-item">
+          <div class="info-label">Barangay</div>
+          <div class="info-value"><?= htmlspecialchars($request['barangay'] ?? 'N/A') ?></div>
+        </div>
+
+        <div class="info-item">
+          <div class="info-label">User ID</div>
+          <div class="info-value"><?= htmlspecialchars($request['user_id']) ?></div>
+        </div>
+
+        <div style="margin-top: 1rem;">
+          <div class="section-header">
+            <i class="fas fa-file-text section-icon"></i>
+            <h3 class="section-title">Description</h3>
+          </div>
+          <div class="description-card">
+            <p class="description-text"><?= nl2br(htmlspecialchars($request['description'])) ?></p>
+            <p class="description-time">Submitted: <?= formatTimestamp($request['submitted_at']) ?></p>
+          </div>
         </div>
       </div>
 
-      <!-- Content Grid -->
-      <div class="content-grid">
-        <!-- Citizen Information -->
-        <div>
-          <div class="section" style="margin-bottom: 1.5rem;">
-            <div class="section-header">
-              <svg class="section-icon icon-svg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-              </svg>
-              <h3 class="section-title">Citizen Information</h3>
-            </div>
-            
-            <div class="info-item">
-              <svg class="info-icon icon-svg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-              </svg>
-              <div class="info-content">
-                <div class="info-value">
-                  <span><?= htmlspecialchars($request['fullname']) ?></span>
-                  <span class="badge-inline">Resident</span>
-                  <svg class="verified-icon icon-svg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                  </svg>
-                </div>
-              </div>
-            </div>
-
-            <div class="info-item">
-              <svg class="info-icon icon-svg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
-              </svg>
-              <div class="info-content">
-                <p class="info-label">Contact Number</p>
-                <div class="info-value">
-                  <span><?= htmlspecialchars($request['contact']) ?></span>
-                  <svg class="verified-icon icon-svg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                  </svg>
-                </div>
-              </div>
-            </div>
-
-            <div class="info-item">
-              <svg class="info-icon icon-svg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-              </svg>
-              <div class="info-content">
-                <p class="info-label">Email</p>
-                <div class="info-value">
-                  <span><?= htmlspecialchars($request['email'] ?? 'N/A') ?></span>
-                  <svg class="verified-icon icon-svg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                  </svg>
-                </div>
-              </div>
-            </div>
-
-            <div class="info-item">
-              <svg class="info-icon icon-svg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-              </svg>
-              <div class="info-content">
-                <p class="info-label">Username</p>
-                <p class="info-value"><?= htmlspecialchars($request['barangay'] ?? 'N/A') ?></p>
-              </div>
-            </div>
-
-            <div class="info-item">
-              <svg class="info-icon icon-svg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/>
-              </svg>
-              <div class="info-content">
-                <p class="info-label">User ID</p>
-                <p class="info-value"><?= htmlspecialchars($request['user_id']) ?></p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Description -->
-          <div class="section">
-            <h3 class="section-title">Description</h3>
-            <div class="description-card">
-              <p class="description-text"><?= nl2br(htmlspecialchars($request['description'])) ?></p>
-              <p class="description-time">Submitted <?= formatTimestamp($request['submitted_at']) ?></p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Update History -->
-        <div class="section">
+      <!-- Update History -->
+      <div class="section">
+        <div class="section-header">
+          <i class="fas fa-history section-icon"></i>
           <h3 class="section-title">Update History</h3>
-          <p class="section-subtitle">Track all status changes and updates</p>
-
-          <div class="update-item active">
-            <div class="update-status">
-              <span>* <?= htmlspecialchars($request['status']) ?></span>
-            </div>
-            <p class="update-time"><?= formatTimestamp($request['submitted_at']) ?></p>
-            <p class="update-description">Current status of the request.</p>
-            <p class="update-by">Updated by: System</p>
-          </div>
-
-          <div class="update-item inactive">
-            <div class="update-status">
-              <span>* Submitted</span>
-            </div>
-            <p class="update-time"><?= formatTimestamp($request['submitted_at']) ?></p>
-            <p class="update-description">Request has been received and will undergo review.</p>
-            <p class="update-by">Updated by: System</p>
-          </div>
         </div>
 
-        <!-- Request Type & Actions -->
-        <div class="section">
-          <!-- Request Type -->
-          <div style="margin-bottom: 1.5rem;">
-            <div class="section-header">
-              <div style="width: 16px; height: 16px; background: #0d9488; border-radius: 2px;"></div>
-              <h3 class="section-title">Request Type</h3>
-            </div>
-            <p class="request-type-badge"><?= htmlspecialchars($request['requesttype']) ?></p>
-          </div>
-
-          <!-- Priority Level -->
-          <div style="margin-bottom: 1.5rem;">
-            <div class="section-header">
-              <div style="width: 16px; height: 16px; background: #0d9488; border-radius: 2px;"></div>
-              <h3 class="section-title">Priority Level</h3>
-            </div>
-            <!-- Changed: Removed onchange auto-submit, priority is now part of the update form -->
-            <select id="prioritySelect" class="priority-select">
-              <option value="LOW" <?= $request['priority'] === 'LOW' ? 'selected' : '' ?>>LOW</option>
-              <option value="MEDIUM" <?= $request['priority'] === 'MEDIUM' ? 'selected' : '' ?>>MEDIUM</option>
-              <option value="HIGH" <?= $request['priority'] === 'HIGH' ? 'selected' : '' ?>>HIGH</option>
-            </select>
-          </div>
-
-          <!-- Status Management -->
-          <div>
-            <h3 class="section-title" style="margin-bottom: 0.75rem;">Status Management</h3>
-            <div class="button-group">
-              <button class="btn btn-primary" onclick="toggleUpdatePanel()">Update Request</button>
-              
-              <div id="updatePanel" class="update-panel">
-                <form method="POST">
-                  <input type="hidden" name="action" value="add_update">
-                  <input type="hidden" name="ticket_id" value="<?= htmlspecialchars($ticket_id) ?>">
-                  <input type="hidden" name="priority" id="hiddenPriority" value="<?= htmlspecialchars($request['priority']) ?>">
-                  
-                  <div class="form-group">
-                    <label class="form-label" for="new_status">New Status</label>
-                    <select id="new_status" name="new_status" class="form-select" required>
-                      <option value="PENDING" <?= $request['status'] === 'PENDING' ? 'selected' : '' ?>>Pending</option>
-                      <option value="IN PROGRESS" <?= $request['status'] === 'IN PROGRESS' ? 'selected' : '' ?>>In Progress</option>
-                      <option value="READY" <?= $request['status'] === 'READY' ? 'selected' : '' ?>>Ready</option>
-                      <option value="COMPLETED" <?= $request['status'] === 'COMPLETED' ? 'selected' : '' ?>>Completed</option>
-                    </select>
-                  </div>
-                  
-                  <div class="form-group">
-                    <label class="form-label" for="update_message">Update Message</label>
-                    <textarea id="update_message" name="update_message" class="form-textarea" placeholder="Describe this update..."></textarea>
-                  </div>
-                  
-                  <button class="btn btn-primary" type="submit">Save Update</button>
-                </form>
+        <?php if (!empty($updates)): ?>
+          <?php foreach ($updates as $update): ?>
+            <div 
+              class="update-item" 
+              style="border-color: <?= getStatusColor($update['status']) ?>"
+            >
+              <div class="update-status" style="color: <?= getStatusColor($update['status']) ?>">
+                <?= htmlspecialchars($update['status']) ?>
               </div>
-              
-              <form method="POST" onsubmit="return confirm('Are you sure you want to delete request <?= htmlspecialchars($ticket_id) ?>? This cannot be undone!');" style="margin: 0;">
-                <input type="hidden" name="action" value="delete_request">
-                <input type="hidden" name="ticket_id" value="<?= htmlspecialchars($request['ticket_id']) ?>">
-                <button type="submit" class="btn btn-danger">Delete Request</button>
+              <p class="update-time"><?= formatTimestamp($update['created_at']) ?></p>
+              <p class="update-message"><?= htmlspecialchars($update['message']) ?></p>
+              <p class="update-by">Updated by: <?= htmlspecialchars($update['updated_by']) ?></p>
+            </div>
+          <?php endforeach; ?>
+        <?php else: ?>
+          <div style="text-align: center; padding: 2rem; color: #6b7280;">
+            <i class="fas fa-inbox" style="font-size: 2rem; opacity: 0.3; margin-bottom: 0.5rem;"></i>
+            <p>No updates yet</p>
+          </div>
+        <?php endif; ?>
+      </div>
+
+      <!-- Request Management -->
+      <div class="section">
+        <!-- Request Type -->
+        <div style="margin-bottom: 1.5rem;">
+          <div class="section-header">
+            <i class="fas fa-file-alt section-icon"></i>
+            <h3 class="section-title">Request Type</h3>
+          </div>
+          <span class="type-badge"><?= htmlspecialchars($request['requesttype']) ?></span>
+        </div>
+
+        <!-- Priority Level -->
+        <div style="margin-bottom: 1.5rem;">
+          <div class="section-header">
+            <i class="fas fa-exclamation-triangle section-icon"></i>
+            <h3 class="section-title">Priority Level</h3>
+          </div>
+          <select id="prioritySelect" class="form-select">
+            <option value="LOW" <?= $request['priority'] === 'LOW' ? 'selected' : '' ?>>Low Priority</option>
+            <option value="MEDIUM" <?= $request['priority'] === 'MEDIUM' ? 'selected' : '' ?>>Medium Priority</option>
+            <option value="HIGH" <?= $request['priority'] === 'HIGH' ? 'selected' : '' ?>>High Priority</option>
+          </select>
+        </div>
+
+        <!-- Status Management -->
+        <div>
+          <div class="section-header">
+            <i class="fas fa-tasks section-icon"></i>
+            <h3 class="section-title">Status Management</h3>
+          </div>
+          
+          <div class="button-group">
+            <button class="btn btn-primary" onclick="toggleUpdatePanel()">
+              <i class="fas fa-edit"></i> Update Request
+            </button>
+            
+            <div id="updatePanel" class="update-panel">
+              <form method="POST">
+                <input type="hidden" name="action" value="add_update">
+                <input type="hidden" name="ticket_id" value="<?= htmlspecialchars($ticket_id) ?>">
+                <input type="hidden" name="priority" id="hiddenPriority" value="<?= htmlspecialchars($request['priority']) ?>">
+                
+                <div class="form-group">
+                  <label class="form-label" for="new_status">New Status</label>
+                  <select id="new_status" name="new_status" class="form-select" required>
+                    <option value="PENDING">Pending</option>
+                    <option value="IN PROGRESS">In Progress</option>
+                    <option value="READY">Ready</option>
+                    <option value="COMPLETED">Completed</option>
+                  </select>
+                </div>
+                
+                <div class="form-group">
+                  <label class="form-label" for="update_message">Update Message</label>
+                  <textarea id="update_message" name="update_message" class="form-textarea" placeholder="Describe this update..."></textarea>
+                </div>
+                
+                <button class="btn btn-primary" type="submit">
+                  <i class="fas fa-save"></i> Save Update
+                </button>
               </form>
             </div>
+            
+            <form method="POST" onsubmit="return confirm('Are you sure you want to delete request <?= htmlspecialchars($ticket_id) ?>? This cannot be undone!');" style="margin: 0;">
+              <input type="hidden" name="action" value="delete_request">
+              <input type="hidden" name="ticket_id" value="<?= htmlspecialchars($request['ticket_id']) ?>">
+              <button type="submit" class="btn btn-danger">
+                <i class="fas fa-trash"></i> Delete Request
+              </button>
+            </form>
           </div>
         </div>
       </div>
@@ -715,7 +652,6 @@ function formatTimestamp($timestamp) {
       panel.classList.toggle('show');
     }
     
-    // Sync priority select with hidden input before form submission
     document.getElementById('prioritySelect').addEventListener('change', function() {
       document.getElementById('hiddenPriority').value = this.value;
     });
